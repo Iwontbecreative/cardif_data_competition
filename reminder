@@ -1,2 +1,10 @@
 XGBOOST PRIOR COMMIT
 0.48536 in 24 mins
+FIXED ISSUE DUMMIES
+LogReg w/o v22
+0.485 in 1 min
+GBT w/o 22
+0.46 in 22 min
+
+Key variables:
+v10, v12, v21, v34, v40, v50, v114, v129

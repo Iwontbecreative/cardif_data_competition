@@ -5,6 +5,7 @@ from sklearn.cross_validation import train_test_split
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import log_loss
+from sklearn.preprocessing import OneHotEncoder
 from datetime import datetime
 import xgboost as xgb
 np.random.seed(1)
@@ -28,7 +29,9 @@ def handle_nas(df):
         df[col].fillna(0, inplace=True)
     return df
 
-def run_xgboost(train, target, test, test_target, leaderboard=False):
+def run_xgboost(train, target, test, test_target=None, 
+    leaderboard=False):
+    
     xgboost_params = {
         "objective": "binary:logistic",
         "booster": "gbtree",
@@ -44,13 +47,13 @@ def run_xgboost(train, target, test, test_target, leaderboard=False):
         }
     train = xgb.DMatrix(train, target)
     if leaderboard:
-        test = xgb.DMatrix(Xtest, ytest)
+        test = xgb.DMatrix(test, test_target)
         eval = [(train, 'Train'), (test, 'Test')]
     else:
         eval = [(train, 'Train')]
     print('Fitting the model')
     start = datetime.now()
-    clf = xgb.train(xgboost_params, train, num_boost_round=1500, evals=eval)
+    clf = xgb.train(xgboost_params, train, num_boost_round=1800, evals=eval)
     print('Predicting')
     pred = clf.predict(test)
     print('Fitting + Predicting time : %s' % datetime.now() - start)
@@ -58,7 +61,7 @@ def run_xgboost(train, target, test, test_target, leaderboard=False):
 
 def output_csv(ids, pred):
     with open('submissions/submission_%s' % datetime.now(), 'w') as sub:
-        writer = csv.writer(sub, separator=',')
+        writer = csv.writer(sub)
         writer.writerow(['Id', 'PredictedProb'])
         writer.writerows(zip(ids, pred))
 
@@ -66,11 +69,9 @@ def output_csv(ids, pred):
 # Would be nice to be able to use this.
 #train["64489"] = np.all([pd.isnull(train[col]) for col in train.columns if train[col].count() == 64489], axis=0).astype(int)
 
-train = pd.read_csv('train.csv')
-labels = train.target
-train = train.drop(['target', 'ID', 'v22'], axis=1)
-train = handle_categorical(train)
-train = handle_nas(train)
+Xtrain = pd.read_csv('train.csv')
+ytrain = Xtrain.target
+Xtrain = Xtrain.drop(['target', 'ID', 'v22'], axis=1)
 
 
 # V12 custom
@@ -78,16 +79,30 @@ train = handle_nas(train)
 
 # Fill na with most frequent value outside of NaNs
 
-
-Xtrain, Xtest, ytrain, ytest = train_test_split(train, labels, test_size=0.2)
+if leaderboard:
+    Xtest = pd.read_csv('test.csv')
+    ids = Xtest.ID
+    Xtest = Xtest.drop(['ID', 'v22'], axis=1)
+    Xtrain = handle_nas(Xtrain)
+    Xtest = handle_nas(Xtest)
+    both = handle_categorical(pd.concat([Xtrain, Xtest]))
+    both.index = list(range(len(both)))
+    print(len(Xtrain))
+    Xtrain = both.ix[:len(Xtrain)-1]
+    Xtest = both.ix[len(Xtrain):]
+else:
+    Xtrain = handle_nas(Xtrain)
+    Xtrain = handle_categorical(Xtrain)
+    Xtrain, Xtest, ytrain, ytest = train_test_split(Xtrain, ytrain, test_size=0.2)
 
 
 
 if use_xgb:
-    pred = run_xgboost(Xtrain, ytrain, leaderboard)
     if leaderboard:
-        output_csv(pred)
+        pred = run_xgboost(Xtrain, ytrain, Xtest, None, leaderboard)
+        output_csv(ids, pred)
     else:
+        pred = run_xgboost(Xtrain, ytrain, Xtest, ytest, leaderboard)
         print('Score :', log_loss(ytest, pred))
 else:
     rfc = RandomForestClassifier(n_estimators=100, n_jobs=-1)
@@ -99,6 +114,6 @@ else:
     #    if j > 0.005:
     #        print(i, j)
     if leaderboard:
-        output_csv(pred)
+        output_csv(ids, pred)
     else:
         print('Score :', log_loss(ytest, pred))
