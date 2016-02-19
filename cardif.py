@@ -25,10 +25,19 @@ def handle_categorical(df):
 def handle_nas(df):
     for col in df.columns:
         #df[col].fillna(df[col].value_counts().index[0], inplace=True)
-        df[col].fillna(0, inplace=True)
+        df[col].fillna(-1, inplace=True)
     return df
 
-def run_xgboost(train, target, test, test_target=None, 
+def change_vars(df):
+    """
+    Add variable transformations here.
+    """
+    #df.v12 = np.log1p(df.v12 + 5)
+    #df.v21 = np.log1p(df.v21 + 5)
+    #df.v34 = np.log1p(df.v34 + 5)
+    return df
+
+def run_xgboost(train, target, test, test_target=None,
     leaderboard=False):
     
     xgboost_params = {
@@ -39,7 +48,7 @@ def run_xgboost(train, target, test, test_target=None,
         "base_score": 0.76,
         "subsample": 0.8,
         "colsample_bytree": 0.8,
-        "max_depth": 7,
+        "max_depth": 10,
         "min_child_weight": 1,
         "seed": 1,
         #"lambda": 1.5
@@ -52,11 +61,9 @@ def run_xgboost(train, target, test, test_target=None,
         eval = [(train, 'Train')]
         test = xgb.DMatrix(test)
     print('Fitting the model')
-    start = datetime.now()
-    clf = xgb.train(xgboost_params, train, num_boost_round=1800, evals=eval)
+    clf = xgb.train(xgboost_params, train, num_boost_round=2200, evals=eval)
     print('Predicting')
     pred = clf.predict(test)
-    #print('Fitting + Predicting time : %s' % datetime.now() - start)
     return pred
 
 def output_csv(ids, pred):
@@ -70,29 +77,29 @@ def output_csv(ids, pred):
 #train["64489"] = np.all([pd.isnull(train[col]) for col in train.columns if train[col].count() == 64489], axis=0).astype(int)
 
 Xtrain = pd.read_csv('train.csv')
+# Remove weird items.
+#Xtrain.drop(60422, axis=0, inplace=True)
 ytrain = Xtrain.target
-Xtrain = Xtrain.drop(['target', 'ID', 'v22'], axis=1)
+# Remove v58 because high correlation (-0.997) with v100
+# Remove v22 because too many categorical
+Xtrain = Xtrain.drop(['target', 'ID', 'v22', 'v58'], axis=1)
 
 
-# V12 custom
-#train.v12 = np.log1p(train.v12)
-
-# Fill na with most frequent value outside of NaNs
 
 if leaderboard:
     Xtest = pd.read_csv('test.csv')
     ids = Xtest.ID
-    Xtest = Xtest.drop(['ID', 'v22'], axis=1)
-    Xtrain = handle_nas(Xtrain)
-    Xtest = handle_nas(Xtest)
-    both = handle_categorical(pd.concat([Xtrain, Xtest]))
+    Xtest = Xtest.drop(['ID', 'v22', 'v58'], axis=1)
+    both = handle_nas(handle_categorical(pd.concat([Xtrain, Xtest])))
+    both = change_vars(both)
     both.index = list(range(len(both)))
     print(len(Xtrain))
     Xtrain = both.ix[:len(Xtrain)-1]
     Xtest = both.ix[len(Xtrain):]
 else:
-    Xtrain = handle_nas(Xtrain)
     Xtrain = handle_categorical(Xtrain)
+    Xtrain = handle_nas(Xtrain)
+    Xtrain = change_vars(Xtrain)
     Xtrain, Xtest, ytrain, ytest = train_test_split(Xtrain, ytrain, test_size=0.2)
 
 
@@ -110,9 +117,9 @@ else:
     rfc.fit(Xtrain, ytrain)
     pred = rfc.predict_proba(Xtest)
     pred = [i[1] for i in pred]
-    #for i, j in zip(train.columns, rfc.feature_importances_):
-    #    if j > 0.005:
-    #        print(i, j)
+    for i, j in zip(Xtrain.columns, rfc.feature_importances_):
+        if j < 0.001:
+            print(i, j*100)
     if leaderboard:
         output_csv(ids, pred)
     else:
