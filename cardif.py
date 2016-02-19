@@ -5,13 +5,12 @@ from sklearn.cross_validation import train_test_split
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import log_loss
-from sklearn.preprocessing import OneHotEncoder
 from datetime import datetime
 import xgboost as xgb
 np.random.seed(1)
 
-leaderboard = False
-use_xgb = False
+leaderboard = True
+use_xgb = True
 
 
 def handle_categorical(df):
@@ -46,17 +45,18 @@ def run_xgboost(train, target, test, test_target=None,
         #"lambda": 1.5
         }
     train = xgb.DMatrix(train, target)
-    if leaderboard:
+    if not leaderboard:
         test = xgb.DMatrix(test, test_target)
         eval = [(train, 'Train'), (test, 'Test')]
     else:
         eval = [(train, 'Train')]
+        test = xgb.DMatrix(test)
     print('Fitting the model')
     start = datetime.now()
     clf = xgb.train(xgboost_params, train, num_boost_round=1800, evals=eval)
     print('Predicting')
     pred = clf.predict(test)
-    print('Fitting + Predicting time : %s' % datetime.now() - start)
+    #print('Fitting + Predicting time : %s' % datetime.now() - start)
     return pred
 
 def output_csv(ids, pred):
