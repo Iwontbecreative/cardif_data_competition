@@ -1,13 +1,14 @@
+import csv
+from datetime import datetime
+from helpers import output_csv
 import pandas as pd
 import numpy as np
-import csv
+import xgboost as xgb
+np.random.seed(99)
 from sklearn.cross_validation import train_test_split
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import log_loss
-from datetime import datetime
-import xgboost as xgb
-np.random.seed(1)
 
 leaderboard = True
 use_xgb = True
@@ -23,6 +24,11 @@ def handle_categorical(df):
     return df
 
 def handle_nas(df):
+    """
+    Several ways can be used to replace NAs.
+    Currently it looks like the best option is to use -1.
+    Creating variables with info about NAs seems to worsen score.
+    """
     for col in df.columns:
         #df[col].fillna(df[col].value_counts().index[0], inplace=True)
         df[col].fillna(-1, inplace=True)
@@ -30,16 +36,18 @@ def handle_nas(df):
 
 def change_vars(df):
     """
-    Add variable transformations here.
+    Add variable transformations here, those will be applied
+    before handle_nas and handle_categorical.
     """
-    #df.v12 = np.log1p(df.v12 + 5)
-    #df.v21 = np.log1p(df.v21 + 5)
-    #df.v34 = np.log1p(df.v34 + 5)
+    # Add 0.01 to avoid -inf
+    # df.v50 = np.log1p(df.v50 + 0.01)
     return df
 
 def run_xgboost(train, target, test, test_target=None,
     leaderboard=False):
-    
+    """
+    Run XGBoost in both local and leaderboard mode.
+    """
     xgboost_params = {
         "objective": "binary:logistic",
         "booster": "gbtree",
@@ -50,7 +58,7 @@ def run_xgboost(train, target, test, test_target=None,
         "colsample_bytree": 0.8,
         "max_depth": 10,
         "min_child_weight": 1,
-        "seed": 1,
+        "seed": 99,
         #"lambda": 1.5
         }
     train = xgb.DMatrix(train, target)
@@ -66,11 +74,6 @@ def run_xgboost(train, target, test, test_target=None,
     pred = clf.predict(test)
     return pred
 
-def output_csv(ids, pred):
-    with open('submissions/submission_%s' % datetime.now(), 'w') as sub:
-        writer = csv.writer(sub)
-        writer.writerow(['Id', 'PredictedProb'])
-        writer.writerows(zip(ids, pred))
 
 
 # Would be nice to be able to use this.
@@ -80,7 +83,8 @@ Xtrain = pd.read_csv('train.csv')
 # Remove weird items.
 #Xtrain.drop(60422, axis=0, inplace=True)
 ytrain = Xtrain.target
-# Remove v58 because high correlation (-0.997) with v100
+# Remove v58 because high correlation (-0.997) with v100.
+# Somehow this doesn't help for other variables with high corr.
 # Remove v22 because too many categorical
 Xtrain = Xtrain.drop(['target', 'ID', 'v22', 'v58'], axis=1)
 
@@ -90,16 +94,16 @@ if leaderboard:
     Xtest = pd.read_csv('test.csv')
     ids = Xtest.ID
     Xtest = Xtest.drop(['ID', 'v22', 'v58'], axis=1)
-    both = handle_nas(handle_categorical(pd.concat([Xtrain, Xtest])))
-    both = change_vars(both)
+    both = change_vars(pd.concat([Xtrain, Xtest]))
+    both = handle_nas(handle_categorical(both))
     both.index = list(range(len(both)))
     print(len(Xtrain))
     Xtrain = both.ix[:len(Xtrain)-1]
     Xtest = both.ix[len(Xtrain):]
 else:
+    Xtrain = change_vars(Xtrain)
     Xtrain = handle_categorical(Xtrain)
     Xtrain = handle_nas(Xtrain)
-    Xtrain = change_vars(Xtrain)
     Xtrain, Xtest, ytrain, ytest = train_test_split(Xtrain, ytrain, test_size=0.2)
 
 
@@ -117,9 +121,9 @@ else:
     rfc.fit(Xtrain, ytrain)
     pred = rfc.predict_proba(Xtest)
     pred = [i[1] for i in pred]
-    for i, j in zip(Xtrain.columns, rfc.feature_importances_):
-        if j < 0.001:
-            print(i, j*100)
+    # for i, j in zip(Xtrain.columns, rfc.feature_importances_):
+        # if j < 0.001:
+            # print(i, j*100)
     if leaderboard:
         output_csv(ids, pred)
     else:

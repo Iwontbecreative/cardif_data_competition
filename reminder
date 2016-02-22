@@ -8,3 +8,7 @@ GBT w/o 22
 
 Key variables:
 v10, v12, v21, v34, v40, v50, v114, v129
+
+Split seems to be ok because:
+Running KS test, we cannot reject the null hyp for any var
+The mean prediction seems to be the same acording to LB
