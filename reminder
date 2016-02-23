@@ -1,17 +1,18 @@
-XGBOOST PRIOR COMMIT
-0.48536 in 24 mins
-FIXED ISSUE DUMMIES
-LogReg w/o v22
-0.485 in 1 min
-GBT w/o 22
-0.46 in 22 min
+Avoid duplicate efforts
 
-Key variables:
-v10, v12, v21, v34, v40, v50, v114, v129
+Things tried but failed/unconvincing:
+- Add NA Count as a feature
+- Replace NA with median/mean/mode
+- Using KS to remove diff distribs accross train/test (no issues detected)
+- Discarding variables with high correlation
 
-Split seems to be ok because:
-Running KS test, we cannot reject the null hyp for any var
-The mean prediction seems to be the same acording to LB
+Things to try:
+- Remove features with low feature importance
+- Remove outliers
+- Ensemble stacking/bagging/averaging
+- Improve RFC, ETC so they can be used
+- Scaling down to 0.7611
+
 
 For GBT, mean prediction is 0.77 so we're overshooting by just a little bit
 if we accept the hypothesis that the means are the same.
@@ -20,3 +21,4 @@ Warning: Currently small changes such as variable scaling are impossible to
 test as the differences might all be seed-related. One way to test those
 would be to run CV but this is currently way too slow. They are 2 possible
 fixes : run in a faster computer or use less variables for testing.
+Note: We currently use XGB CV with 150 iter to test for this.

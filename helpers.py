@@ -49,7 +49,7 @@ def combine_csv(files, weights='mean', center=0.7611):
     elif weights == 'min':
         preds = [min(i) for i in preds]
     elif isinstance(weights, list) and len(weights) == len(files):
-        preds = [i * w for i, w in zip(preds, weights)]
+        preds = [sum(j * w for j, w in zip(i, weights)) for i in preds]
     elif weights == 'min_dist':
         #TODO: Implement this elegantly.
         pass

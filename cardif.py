@@ -8,8 +8,8 @@ from sklearn.cross_validation import train_test_split, KFold
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import log_loss
 
-leaderboard = False
-use_xgb = True
+leaderboard = True
+use_xgb = False
 
 def handle_categorical(df):
     text_col = df.select_dtypes(['object']).columns
@@ -34,10 +34,11 @@ def handle_nas(df):
 def change_vars(df):
     """
     Add variable transformations here, those will be applied
-    before handle_nas and handle_categorical.
+    before handle_nas and handle_categorical. The changes in confirmed
+    were tested against 3-CV XGB.
     """
-    # Add 0.01 to avoid -inf
-    # df.v50 = np.log1p(df.v50 + 0.01)
+    # Confirmed:
+    df.v50 = np.log1p(df.v50 + 0.01)
     return df
 
 def run_xgboost(train, target, test=None, test_target=None,
@@ -50,19 +51,18 @@ def run_xgboost(train, target, test=None, test_target=None,
         "booster": "gbtree",
         "eval_metric": "logloss",
         "eta": 0.01,
-        "base_score": 0.76,
+        "base_score": 0.7611,
         "subsample": 0.8,
         "colsample_bytree": 0.8,
         "max_depth": 10,
         "min_child_weight": 1,
-        "seed": 999,
         #"lambda": 1.5
         }
     train = xgb.DMatrix(train, target)
 
     if not leaderboard:
         test = xgb.DMatrix(test, test_target)
-        xgb.cv(xgboost_params, train, num_boost_round=150, nfold=3)
+        xgb.cv(xgboost_params, train, num_boost_round=150, nfold=3, seed=0)
     else:
         eval = [(train, 'Train')]
         test = xgb.DMatrix(test)
@@ -73,7 +73,7 @@ def run_sklearn(train, target, test):
     """
     Run a RFC.
     """
-    rfc = RandomForestClassifier(n_estimators=100, n_jobs=-1)
+    rfc = RandomForestClassifier(n_estimators=1000, n_jobs=-1)
     rfc.fit(train, target)
     pred = rfc.predict_proba(test)
     pred = [i[1] for i in pred]
@@ -96,14 +96,14 @@ ytrain = Xtrain.target
 # Remove v58 because high correlation (-0.997) with v100.
 # Somehow this doesn't help for other variables with high corr.
 # Remove v22 because too many categorical
-Xtrain = Xtrain.drop(['target', 'ID', 'v22', 'v58'], axis=1)
+Xtrain = Xtrain.drop(['target', 'ID', 'v22'], axis=1)
 
 
 
 if leaderboard:
     Xtest = pd.read_csv('test.csv')
     ids = Xtest.ID
-    Xtest = Xtest.drop(['ID', 'v22', 'v58'], axis=1)
+    Xtest = Xtest.drop(['ID', 'v22'], axis=1)
     both = change_vars(pd.concat([Xtrain, Xtest]))
     both = handle_nas(handle_categorical(both))
     both.index = list(range(len(both)))
