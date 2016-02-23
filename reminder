@@ -12,3 +12,11 @@ v10, v12, v21, v34, v40, v50, v114, v129
 Split seems to be ok because:
 Running KS test, we cannot reject the null hyp for any var
 The mean prediction seems to be the same acording to LB
+
+For GBT, mean prediction is 0.77 so we're overshooting by just a little bit
+if we accept the hypothesis that the means are the same.
+
+Warning: Currently small changes such as variable scaling are impossible to
+test as the differences might all be seed-related. One way to test those
+would be to run CV but this is currently way too slow. They are 2 possible
+fixes : run in a faster computer or use less variables for testing.

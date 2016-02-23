@@ -1,18 +1,15 @@
-import csv
-from datetime import datetime
 from helpers import output_csv
+from datetime import datetime
 import pandas as pd
 import numpy as np
 import xgboost as xgb
-np.random.seed(99)
-from sklearn.cross_validation import train_test_split
+np.random.seed(4)
+from sklearn.cross_validation import train_test_split, KFold
 from sklearn.ensemble import RandomForestClassifier
-from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import log_loss
 
-leaderboard = True
+leaderboard = False
 use_xgb = True
-
 
 def handle_categorical(df):
     text_col = df.select_dtypes(['object']).columns
@@ -43,7 +40,7 @@ def change_vars(df):
     # df.v50 = np.log1p(df.v50 + 0.01)
     return df
 
-def run_xgboost(train, target, test, test_target=None,
+def run_xgboost(train, target, test=None, test_target=None,
     leaderboard=False):
     """
     Run XGBoost in both local and leaderboard mode.
@@ -58,20 +55,31 @@ def run_xgboost(train, target, test, test_target=None,
         "colsample_bytree": 0.8,
         "max_depth": 10,
         "min_child_weight": 1,
-        "seed": 99,
+        "seed": 999,
         #"lambda": 1.5
         }
     train = xgb.DMatrix(train, target)
+
     if not leaderboard:
         test = xgb.DMatrix(test, test_target)
-        eval = [(train, 'Train'), (test, 'Test')]
+        xgb.cv(xgboost_params, train, num_boost_round=150, nfold=3)
     else:
         eval = [(train, 'Train')]
         test = xgb.DMatrix(test)
-    print('Fitting the model')
-    clf = xgb.train(xgboost_params, train, num_boost_round=2200, evals=eval)
-    print('Predicting')
-    pred = clf.predict(test)
+        clf = xgb.train(xgboost_params, train, num_boost_round=2200, evals=eval)
+        return clf.predict(test)
+
+def run_sklearn(train, target, test):
+    """
+    Run a RFC.
+    """
+    rfc = RandomForestClassifier(n_estimators=100, n_jobs=-1)
+    rfc.fit(train, target)
+    pred = rfc.predict_proba(test)
+    pred = [i[1] for i in pred]
+    # for i, j in zip(Xtrain.columns, rfc.feature_importances_):
+        # if j < 0.001:
+            # print(i, j*100)
     return pred
 
 
@@ -79,6 +87,8 @@ def run_xgboost(train, target, test, test_target=None,
 # Would be nice to be able to use this.
 #train["64489"] = np.all([pd.isnull(train[col]) for col in train.columns if train[col].count() == 64489], axis=0).astype(int)
 
+print("Start processing.")
+start = datetime.now()
 Xtrain = pd.read_csv('train.csv')
 # Remove weird items.
 #Xtrain.drop(60422, axis=0, inplace=True)
@@ -97,34 +107,30 @@ if leaderboard:
     both = change_vars(pd.concat([Xtrain, Xtest]))
     both = handle_nas(handle_categorical(both))
     both.index = list(range(len(both)))
-    print(len(Xtrain))
     Xtrain = both.ix[:len(Xtrain)-1]
     Xtest = both.ix[len(Xtrain):]
 else:
     Xtrain = change_vars(Xtrain)
     Xtrain = handle_categorical(Xtrain)
     Xtrain = handle_nas(Xtrain)
-    Xtrain, Xtest, ytrain, ytest = train_test_split(Xtrain, ytrain, test_size=0.2)
+    print("Processing time : ", datetime.now() - start)
 
 
-
+print('Fitting and predicting')
+start = datetime.now()
 if use_xgb:
     if leaderboard:
         pred = run_xgboost(Xtrain, ytrain, Xtest, None, leaderboard)
         output_csv(ids, pred)
     else:
-        pred = run_xgboost(Xtrain, ytrain, Xtest, ytest, leaderboard)
-        print('Score :', log_loss(ytest, pred))
+        run_xgboost(Xtrain, ytrain, leaderboard=leaderboard)
+# Split if we use RFC or sklearn. XGBoost handles it.
 else:
-    rfc = RandomForestClassifier(n_estimators=100, n_jobs=-1)
-    #rfc = LogisticRegression(penalty='l2')
-    rfc.fit(Xtrain, ytrain)
-    pred = rfc.predict_proba(Xtest)
-    pred = [i[1] for i in pred]
-    # for i, j in zip(Xtrain.columns, rfc.feature_importances_):
-        # if j < 0.001:
-            # print(i, j*100)
+    if not leaderboard:
+        Xtrain, Xtest, ytrain, ytest = train_test_split(Xtrain, ytrain, test_size=0.2)
+    pred = run_sklearn(Xtrain, ytrain, Xtest)
     if leaderboard:
         output_csv(ids, pred)
     else:
         print('Score :', log_loss(ytest, pred))
+print('Fitting and predicting time :', datetime.now() - start)
