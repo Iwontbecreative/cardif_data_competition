@@ -8,7 +8,7 @@ model_train.csv and model_test.csv.
 For more information on why this is useful, see stacking.
 """
 
-from sklearn.cross_validation import StratifiedKFold
+from sklearn.cross_validation import KFold
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import log_loss
 import pandas as pd
@@ -22,19 +22,18 @@ start = datetime.now()
 print('Starting: %s\n' % start)
 
 train = pd.read_csv('pre_train.csv')
-train = train.reindex(np.random.permutation(train.index))
 target = train.target
 ids = train.ID
 train = train.drop(['target', 'ID'], axis=1)
 
 # Train KFold
-rfc = RandomForestClassifier(n_estimators=2, criterion='entropy',
+rfc = RandomForestClassifier(n_estimators=1000, criterion='entropy',
                              n_jobs=4, random_state=1)
 preds = []
 errors = np.zeros(5)
 
 print('Generating local scores.')
-for i, (train_ix, test_ix) in enumerate(StratifiedKFold(target, 5, shuffle=False)):
+for i, (train_ix, test_ix) in enumerate(KFold(len(target), 5)):
     print('Iter', i + 1)
     print('Proportion of 1', target.loc[test_ix].mean())
     start_fitting = datetime.now()
