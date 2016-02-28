@@ -7,9 +7,10 @@ np.random.seed(4)
 from sklearn.cross_validation import train_test_split, KFold
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import log_loss
+from sklearn.preprocessing import LabelEncoder
 
 leaderboard = True
-use_xgb = False
+use_xgb = True
 
 def handle_categorical(df):
     text_col = df.select_dtypes(['object']).columns
@@ -50,23 +51,22 @@ def run_xgboost(train, target, test=None, test_target=None,
         "objective": "binary:logistic",
         "booster": "gbtree",
         "eval_metric": "logloss",
-        "eta": 0.01,
-        "base_score": 0.7611,
+        "eta": 0.03,
+        "base_score": 0.761,
         "subsample": 0.8,
         "colsample_bytree": 0.8,
         "max_depth": 10,
-        "min_child_weight": 1,
-        #"lambda": 1.5
+        "min_child_weight": 0.75,
         }
     train = xgb.DMatrix(train, target)
 
     if not leaderboard:
-        test = xgb.DMatrix(test, test_target)
-        xgb.cv(xgboost_params, train, num_boost_round=150, nfold=3, seed=0)
+        xgb.cv(xgboost_params, train, num_boost_round=150, nfold=5,
+               seed=0, verbose_eval=1)
     else:
         eval = [(train, 'Train')]
         test = xgb.DMatrix(test)
-        clf = xgb.train(xgboost_params, train, num_boost_round=2200, evals=eval)
+        clf = xgb.train(xgboost_params, train, num_boost_round=180, evals=eval)
         return clf.predict(test)
 
 def run_sklearn(train, target, test):
@@ -90,11 +90,20 @@ def run_sklearn(train, target, test):
 print("Start processing.")
 start = datetime.now()
 Xtrain = pd.read_csv('train.csv')
+bonus = pd.read_csv('first_level/RFC_1000est_entropy_train.csv').pred
+Xtrain = pd.concat([Xtrain, bonus], axis=1)
+bonus = pd.read_csv('first_level/LR_l1_train.csv').pred
+bonus.name = "pred2"
+Xtrain = pd.concat([Xtrain, bonus], axis=1)
+bonus = pd.read_csv('first_level/LR_train.csv').pred
+bonus.name = "pred3"
+Xtrain = pd.concat([Xtrain, bonus], axis=1)
+bonus = pd.read_csv('first_level/XGB_def_params_train.csv').pred
+bonus.name = "pred4"
+Xtrain = pd.concat([Xtrain, bonus], axis=1)
 # Remove weird items.
 #Xtrain.drop(60422, axis=0, inplace=True)
 ytrain = Xtrain.target
-# Remove v58 because high correlation (-0.997) with v100.
-# Somehow this doesn't help for other variables with high corr.
 # Remove v22 because too many categorical
 Xtrain = Xtrain.drop(['target', 'ID', 'v22'], axis=1)
 
@@ -103,8 +112,21 @@ Xtrain = Xtrain.drop(['target', 'ID', 'v22'], axis=1)
 if leaderboard:
     Xtest = pd.read_csv('test.csv')
     ids = Xtest.ID
-    Xtest = Xtest.drop(['ID', 'v22'], axis=1)
+    Xtest = Xtest.drop(['ID', 'v22', 'v56'], axis=1)
+    bonus = pd.read_csv('first_level/RFC_1000est_entropy_test.csv').pred
+    Xtest = pd.concat([Xtest, bonus], axis=1)
+    bonus = pd.read_csv('first_level/LR_l1_test.csv').pred
+    bonus.name = "pred2"
+    Xtest = pd.concat([Xtest, bonus], axis=1)
+    bonus = pd.read_csv('first_level/LR_test.csv').pred
+    bonus.name = "pred3"
+    Xtest = pd.concat([Xtest, bonus], axis=1)
+    bonus = pd.read_csv('first_level/XGB_def_params_test.csv').pred
+    bonus.name = "pred4"
+    Xtest = pd.concat([Xtest, bonus], axis=1)
     both = change_vars(pd.concat([Xtrain, Xtest]))
+    both.v56.fillna('AAAAAAAA', inplace=True)
+    both.v56 = LabelEncoder().fit_transform(both.v56)
     both = handle_nas(handle_categorical(both))
     both.index = list(range(len(both)))
     Xtrain = both.ix[:len(Xtrain)-1]
