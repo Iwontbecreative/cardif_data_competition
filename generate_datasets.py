@@ -38,12 +38,12 @@ test = pd.read_csv('test.csv')
 
 # Preprocessed train/test
 both = change_vars(pd.concat([train, test]))
-both = both.drop(['v22'], axis=1)
+# We drop v107 because it is a duplicate of v91 
+both = both.drop(['v22', 'v107'], axis=1)
 both = handle_nas(handle_categorical(both))
 both.index = list(range(len(both)))
 train = both.ix[:len(train)-1]
 train["target"] = target
 test = both.ix[len(train):]
-del both
 train.to_csv('pre_train.csv', index=False)
 test.to_csv('pre_test.csv', index=False)
