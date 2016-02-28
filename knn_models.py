@@ -17,9 +17,16 @@ train = pd.read_csv('train.csv')
 # Picking only the columns with counts > 100k.
 train = train[['target', 'v10', 'v12', 'v14', 'v21', 'v34', 'v38',
                'v40', 'v50', 'v62', 'v72', 'v114', 'v128']]
+# Overrepresenting v50 to reflect its prediction accuracy.
+train['v50bis'] = train.v50
+train['v50tris'] = train.v50
+train['v50tetris'] = train.v50
 train.fillna(-1, inplace=True) # Is there a better way ?
 target = train.target
 train.drop(['target'], axis=1, inplace=True)
+
+# Scaling variables enable distances to work well.
+train = pd.DataFrame(StandardScaler().fit_transform(train))
 
 knc = KNeighborsClassifier(n_neighbors=400, p=1, weights='distance',
                            n_jobs=4)
