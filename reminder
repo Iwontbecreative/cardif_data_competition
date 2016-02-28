@@ -9,7 +9,7 @@ Things tried but failed/unconvincing:
 Things to try:
 - Remove features with low feature importance
 - Remove outliers
-- Ensemble stacking/bagging/averaging
+- Ensemble bagging/averaging
 - Improve RFC, ETC so they can be used
 - Scaling down to 0.7611
 
