@@ -13,10 +13,25 @@ from sklearn.preprocessing import StandardScaler
 
 NAME = "KNN_400_p1_wdistance"
 
+def handle_categorical(df):
+    text_col = df.select_dtypes(['object']).columns
+    for col in text_col:
+        col_to_add = pd.get_dummies(df[col])
+        df = df.drop([col], axis=1)
+        for i, col2 in enumerate(col_to_add.columns):
+            df['%s_%s' % (col, i)] = col_to_add[col2]
+    return df
+ 
 train = pd.read_csv('train.csv')
 # Picking only the columns with counts > 100k.
-train = train[['target', 'v10', 'v12', 'v14', 'v21', 'v34', 'v38',
-               'v40', 'v50', 'v62', 'v72', 'v114', 'v128']]
+train = train[['target', 'v3', 'v10', 'v12', 'v14', 'v21',
+               'v31', 'v34', 'v38', 'v40', 'v47', 'v50', 'v52', 'v62',
+               'v66', 'v71', 'v72', 'v74', 'v75', 'v79', 'v107',
+               'v112', 'v114', 'v125', 'v128']]
+train = train[['v3', 'v31', 'v47', 'v52', 'v71', 'v74', 'v75', 
+    'v79', 'v107', 'v112', 'v125']]
+train = handle_categorical(train)
+print(len(train.columns))
 # Overrepresenting v50 to reflect its prediction accuracy.
 train['v50bis'] = train.v50
 train['v50tris'] = train.v50
