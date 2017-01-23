@@ -4,12 +4,12 @@ from datetime import datetime
 from sklearn.cross_validation import train_test_split, KFold
 
 def handle_categorical(df):
-    text_col = df.select_dtypes(['object']).columns
-    for col in text_col:
-        col_to_add = pd.get_dummies(df[col])
-        df = df.drop([col], axis=1)
-        for i, col2 in enumerate(col_to_add.columns):
-            df['%s_%s' % (col, i)] = col_to_add[col2]
+    # text_col = df.select_dtypes(['object']).columns
+    # for col in text_col:
+        # col_to_add = pd.get_dummies(df[col])
+        # df = df.drop([col], axis=1)
+        # for i, col2 in enumerate(col_to_add.columns):
+            # df['%s_%s' % (col, i)] = col_to_add[col2]
     return df
 
 def handle_nas(df):

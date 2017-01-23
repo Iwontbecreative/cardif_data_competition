@@ -21,24 +21,42 @@ import xgboost as xgb
 np.random.seed(1)
 from datetime import datetime
 
-NAME = "XGB_def_params"
+def naive_bayes_categorical(train, test):
+    """
+    Returns a dict containing naive bayes prob for each value of categorical
+    variables.
+    """
+    text_col = train.select_dtypes(include=['object']).columns
+    for col in text_col:
+        frequencies = {}
+        train[col].fillna(-1, inplace=True)
+        test[col].fillna(-1, inplace=True)
+        for value in train[col].unique():
+            frequencies[value] = train[train[col] == value].target.mean()
+        train[col] = train[col].apply(lambda v: frequencies[v] if v != -1 else v)
+        test[col] = test[col].apply(lambda v: frequencies[v] if v in frequencies else -1)
+    return train, test
+
+to_drop = ['v8','v23','v25','v36','v37','v46','v51','v53','v54','v63','v73','v75','v79','v81','v82','v89','v92','v95','v105','v108','v109','v110','v116','v117','v118','v119','v123','v124','v128']
+
+NAME = "ETC_750est_entropy"
 XGB = "XGB" in NAME
 
 start = datetime.now()
 print('Starting: %s\n' % start)
 
 train = pd.read_csv('pre_train.csv')
-train = train.drop(['v56_%s' % i  for i in range(130)], axis=1)
+train.drop(to_drop, axis=1, inplace=True)
 target = train.target
 ids = train.ID
-train = train.drop(['target', 'ID'], axis=1)
+train = train.drop(['ID'], axis=1)
 
 if XGB:
     xgboost_params = {
         "objective": "binary:logistic",
         "booster": "gbtree",
         "eval_metric": "logloss",
-        "eta": 0.03,
+        "eta": 0.1,
         "base_score": 0.761,
         "subsample": 0.8,
         "colsample_bytree": 0.8,
@@ -46,62 +64,70 @@ if XGB:
         "min_child_weight": 0.75,
         }
 else:
-    rfc = ExtraTreesClassifier(n_estimators=1000, criterion='entropy',
-                               n_jobs=4, random_state=1, verbose=1)
-    # rfc = KNeighborsClassifier(n_neighbors=400, weights='distance', p=1,
-                               # n_jobs=4)
+    # rfc = RandomForestClassifier(n_estimators=1000, criterion='entropy',
+                               # n_jobs=4, random_state=1)
+    rfc = LogisticRegression()
+    rfc = ExtraTreesClassifier(n_estimators=750, criterion='entropy',
+                               n_jobs=4, max_features=70, min_samples_split=4,
+                               min_samples_leaf=1, max_depth=45)
 
-# preds = []
-# errors = np.zeros(5)
 
-# print('Generating local scores.')
-# for i, (train_ix, test_ix) in enumerate(KFold(len(target), 5)):
-    # print('Iter', i + 1)
-    # print('Proportion of 1', target.loc[test_ix].mean())
-    # start_fitting = datetime.now()
-    # if XGB:
-        # xgb_train = xgb.DMatrix(train.loc[train_ix], target.loc[train_ix])
-        # xgb_test = xgb.DMatrix(train.loc[test_ix], target.loc[test_ix])
-        # eval = [(xgb_train, 'Train'), (xgb_test, 'Test')]
-        # clf = xgb.train(xgboost_params, xgb_train, num_boost_round=200,
-                        # evals=eval, verbose_eval=5)
-        # pred = clf.predict(xgb_test)
-    # else:
-        # rfc.fit(train.loc[train_ix], target.loc[train_ix])
-        # pred = rfc.predict_proba(train.loc[test_ix])[:, 1]
-    # preds += list(pred)
-    # error = log_loss(target.loc[test_ix], pred)
-    # errors[i] = error
-    # print('Error on fold:', error)
-    # print('Time expended:', datetime.now() - start_fitting)
+preds = []
+errors = np.zeros(5)
 
-# print('Error mean: %s, stdev: %s, min: %s, max: %s' % (errors.mean(),
-    # errors.std(), errors.min(), errors.max()))
+print('Generating local scores.')
+for i, (train_ix, test_ix) in enumerate(KFold(len(target), 5)):
+    print('Iter', i + 1)
+    print('Proportion of 1', target.loc[test_ix].mean())
+    start_fitting = datetime.now()
+    if XGB:
+        #FIXME: This does not work since NB change. 
+        xgb_train = xgb.DMatrix(train.loc[train_ix], target.loc[train_ix])
+        xgb_test = xgb.DMatrix(train.loc[test_ix], target.loc[test_ix])
+        eval = [(xgb_train, 'Train'), (xgb_test, 'Test')]
+        clf = xgb.train(xgboost_params, xgb_train, num_boost_round=200,
+                        evals=eval, verbose_eval=5)
+        pred = clf.predict(xgb_test)
+    else:
+        subtrain, subtest = naive_bayes_categorical(train.loc[train_ix],
+                                                    train.loc[test_ix])
+        train_target, test_target = subtrain.target, subtest.target
+        subtrain.drop(['target'], axis=1, inplace=True)
+        subtest.drop(['target'], axis=1, inplace=True)
+        rfc.fit(subtrain, train_target)
+        pred = rfc.predict_proba(subtest)[:, 1]
+    preds += list(pred)
+    error = log_loss(test_target, pred)
+    errors[i] = error
+    print('Error on fold:', error)
+    print('Time expended:', datetime.now() - start_fitting)
 
-# feature = pd.DataFrame({'ID': ids, 'pred': preds})
-# feature.sort(['ID']).to_csv('first_level/%s_train.csv' % NAME, index=False)
+print('Error mean: %s, stdev: %s, min: %s, max: %s' % (errors.mean(),
+    errors.std(), errors.min(), errors.max()))
+
+feature = pd.DataFrame({'ID': ids, 'pred': preds})
+feature.sort(['ID']).to_csv('first_level/%s_train.csv' % NAME, index=False)
 
 # Build for test
-
 print('Fitting and predicting whole dataset.')
 start_fitting = datetime.now()
 
 if XGB:
+    #FIXME: This doesn't work since NB changes.
     xgb_train = xgb.DMatrix(train, target)
     clf = xgb.train(xgboost_params, xgb_train, num_boost_round=250,
                     verbose_eval=25)
-    del train
-    del xgb_train
 else:
+    test = pd.read_csv('pre_test.csv')
+    test.drop(to_drop, axis=1, inplace=True)
+    ids = test.ID
+    test.drop(['ID'], axis=1, inplace=True)
+    train, test = naive_bayes_categorical(train, test)
+    target = train.target
+    train.drop(['target'], axis=1, inplace=True)
     rfc.fit(train, target)
-    del train
 
-# This is done here to avoid using too much memory.
 print('Generating test scores')
-test = pd.read_csv('pre_test.csv')
-test = test.drop(['v56_%s' % i  for i in range(130)], axis=1)
-ids = test.ID
-test = test.drop(['ID'], axis=1)
 
 pred = clf.predict(xgb.DMatrix(test)) if XGB else rfc.predict_proba(test)[:, 1]
 
